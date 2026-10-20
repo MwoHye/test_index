@@ -1,180 +1,371 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8" />
-<title>반응속도 테스트</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#14002e">
+<meta name="description" content="누르면 눌리고 당기면 쭉 늘어나는 말랑이">
+<title>말랑이 괴롭히기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
 <style>
-  /* 화면 전체를 가운데 정렬하기 위한 기본 스타일 */
-  body {
-    margin: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-family: "맑은 고딕", sans-serif;
-    background-color: #f2f2f2;
-  }
+:root{--lime:#c6ff00;--purple:#b45cff;--pink:#ff6ad5;--ink:#2a0a5e;--bg:#14002e;--s:1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none}
+body{
+  font-family:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;color:#fff;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;
+  background:
+    radial-gradient(circle at 18% 14%,#5a22bd 0,transparent 46%),
+    radial-gradient(circle at 88% 92%,#9a1fc4 0,transparent 52%),
+    var(--bg);
+}
 
-  h1 {
-    margin-bottom: 8px;
-    color: #333;
-  }
+header{position:fixed;top:0;left:0;right:0;text-align:center;padding:calc(env(safe-area-inset-top,0px) + 26px) 16px 0;pointer-events:none;z-index:3}
+h1{margin:0;font-weight:400;font-size:clamp(32px,10vw,50px);letter-spacing:-.5px;color:#fff;
+  text-shadow:0 0 6px #fff,0 0 14px var(--lime),0 0 32px var(--lime),0 0 64px var(--lime);animation:flick 6s infinite}
+header p{margin:8px 0 0;font-size:16px;color:var(--pink);text-shadow:0 0 10px var(--pink);transition:opacity .4s}
+header p.gone{opacity:0}
+@keyframes flick{0%,18%,22%,62%,64%,100%{opacity:1}20%,63%{opacity:.5}}
 
-  /* 최고 기록을 보여주는 텍스트 */
-  #bestRecord {
-    margin-bottom: 20px;
-    font-size: 18px;
-    color: #555;
-  }
+.deco{position:fixed;pointer-events:none;opacity:.75;animation:float 6s ease-in-out infinite;text-shadow:0 0 10px currentColor}
+@keyframes float{50%{transform:translateY(-14px) rotate(25deg)}}
 
-  /* 가운데에 있는 큰 네모 박스 */
-  #box {
-    width: 320px;
-    height: 320px;
-    border-radius: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    color: white;
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-    user-select: none; /* 텍스트가 드래그로 선택되는 것 방지 */
-    transition: background-color 0.1s ease;
-    padding: 20px;
-    box-sizing: border-box;
-  }
+/* 말랑이: 가운데 고정, 앵커는 크기 0 */
+#mal{position:absolute;left:50%;top:54%;width:0;height:0;z-index:5}
+#svg{position:absolute;overflow:visible;width:calc(360px*var(--s));height:calc(360px*var(--s));
+  left:calc(-180px*var(--s));top:calc(-180px*var(--s));filter:drop-shadow(0 0 14px rgba(198,255,0,.85)) drop-shadow(0 0 34px rgba(180,92,255,.6))}
+.dz{transform-box:fill-box;transform-origin:center;animation:spin 1.6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-  /* 상태별 박스 색깔 */
-  #box.wait {
-    background-color: #e74c3c; /* 빨간색: 기다리는 중 */
-  }
-  #box.go {
-    background-color: #2ecc71; /* 초록색: 지금 클릭! */
-  }
-  #box.too-soon {
-    background-color: #e67e22; /* 주황색: 너무 빨리 눌렀을 때 */
-  }
-  #box.result {
-    background-color: #3498db; /* 파란색: 결과 표시 */
-  }
+#bubble{position:absolute;left:0;bottom:calc(120px*var(--s));transform:translateX(-50%) scale(.6);background:#fff;color:var(--ink);
+  padding:8px 16px;border-radius:18px;font-size:18px;white-space:nowrap;opacity:0;pointer-events:none;
+  transition:opacity .15s,transform .2s cubic-bezier(.3,1.8,.5,1);box-shadow:0 0 18px var(--purple)}
+#bubble::after{content:"";position:absolute;left:50%;top:100%;margin-left:-7px;border:7px solid transparent;border-top-color:#fff}
+#bubble.show{opacity:1;transform:translateX(-50%) scale(1)}
+#mal.below #bubble{bottom:auto;top:calc(120px*var(--s))}
+#mal.below #bubble::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#fff}
 
-  /* 다시 시도 버튼 */
-  #retryButton {
-    margin-top: 20px;
-    padding: 10px 24px;
-    font-size: 16px;
-    border: none;
-    border-radius: 8px;
-    background-color: #333;
-    color: white;
-    cursor: pointer;
-  }
-  #retryButton:hover {
-    background-color: #555;
-  }
+#hud{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);display:flex;justify-content:center;gap:10px;font-size:15px;z-index:4;pointer-events:none}
+.pill{padding:8px 14px;border-radius:99px;border:2px solid var(--purple);color:#f3d9ff;
+  box-shadow:0 0 12px var(--purple),inset 0 0 10px rgba(180,92,255,.5);background:rgba(20,0,46,.5)}
+.pill b{font-weight:400;color:var(--lime);text-shadow:0 0 8px var(--lime)}
+
+.spark{position:fixed;pointer-events:none;z-index:6;font-style:normal;line-height:1;animation:pop .7s ease-out forwards;text-shadow:0 0 10px currentColor}
+@keyframes pop{to{transform:translate(var(--dx),var(--dy)) scale(.2) rotate(180deg);opacity:0}}
+
+@media (prefers-reduced-motion:reduce){.deco,h1{animation:none}}
 </style>
 </head>
 <body>
+<header>
+  <h1>말랑이 괴롭히기</h1>
+  <p id="hint">꾹 눌러보고, 쭉 당기고, 빙빙 돌려보세요</p>
+</header>
 
-  <h1>반응속도 테스트</h1>
-  <!-- 최고 기록 표시 영역 -->
-  <div id="bestRecord">최고 기록: 없음</div>
+<div id="mal">
+  <svg id="svg" viewBox="-180 -180 360 360" aria-label="말랑이">
+    <defs>
+      <radialGradient id="gb" cx=".35" cy=".28" r=".8">
+        <stop offset="0" stop-color="#f6ffa8"/><stop offset=".5" stop-color="#c6ff00"/><stop offset="1" stop-color="#86d100"/>
+      </radialGradient>
+      <radialGradient id="gc">
+        <stop offset="0" stop-color="#ff6ad5" stop-opacity=".9"/><stop offset="1" stop-color="#ff6ad5" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <path id="body" fill="url(#gb)" stroke="rgba(255,255,255,.4)" stroke-width="4" stroke-linejoin="round"/>
+    <g id="hl"><ellipse cx="-34" cy="-52" rx="22" ry="10" fill="#fff" opacity=".35" transform="rotate(-28 -34 -52)"/></g>
+    <g id="face">
+      <ellipse cx="-58" cy="14" rx="20" ry="11" fill="url(#gc)"/>
+      <ellipse cx="58" cy="14" rx="20" ry="11" fill="url(#gc)"/>
+      <g id="eyes">
+        <ellipse id="eyeL" cx="-30" cy="-14" rx="14" ry="16" fill="#fff"/>
+        <ellipse id="eyeR" cx="30" cy="-14" rx="14" ry="16" fill="#fff"/>
+        <ellipse id="pupL" cx="-30" cy="-14" rx="7" ry="8" fill="#2a0a5e"/>
+        <ellipse id="pupR" cx="30" cy="-14" rx="7" ry="8" fill="#2a0a5e"/>
+      </g>
+      <g id="dz" display="none">
+        <text class="dz" x="-30" y="-4" text-anchor="middle" font-size="32" font-weight="700" fill="#2a0a5e" font-family="sans-serif">@</text>
+        <text class="dz" x="30" y="-4" text-anchor="middle" font-size="32" font-weight="700" fill="#2a0a5e" font-family="sans-serif">@</text>
+      </g>
+      <path id="smile" d="M-16 20 Q0 36 16 20" fill="none" stroke="#2a0a5e" stroke-width="5" stroke-linecap="round"/>
+      <ellipse id="oh" cx="0" cy="28" rx="10" ry="12" fill="#2a0a5e" display="none"/>
+    </g>
+  </svg>
+  <div id="bubble"></div>
+</div>
 
-  <!-- 클릭 대상이 되는 큰 박스 -->
-  <div id="box" class="wait">기다리세요</div>
+<div id="hud">
+  <div class="pill">최대 늘림 <b id="maxs">0.0</b>cm</div>
+  <div class="pill">튕긴 횟수 <b id="whoosh">0</b>회</div>
+</div>
 
-  <!-- 언제든 처음부터 다시 시작할 수 있는 버튼 -->
-  <button id="retryButton">다시 시도</button>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const mal = $('mal'), bubble = $('bubble'), bodyP = $('body'), face = $('face'), hl = $('hl');
+  const eyeL = $('eyeL'), eyeR = $('eyeR'), pupL = $('pupL'), pupR = $('pupR');
+  const eyes = $('eyes'), dz = $('dz'), smile = $('smile'), oh = $('oh');
+  const pick = a => a[Math.random() * a.length | 0];
+  const cols = ['#c6ff00', '#ff6ad5', '#b45cff', '#ffffff'];
 
-  <script>
-    // ===== 상태(state)와 관련 변수들 =====
-    // state는 현재 게임이 어떤 단계인지를 나타내는 값입니다.
-    // 'wait'     : 박스가 빨간색이고 초록색으로 바뀌길 기다리는 중
-    // 'go'       : 박스가 초록색으로 바뀌어서 클릭을 기다리는 중
-    // 'tooSoon'  : 초록색으로 바뀌기 전에 클릭해서 실패한 상태
-    // 'result'   : 반응 시간을 측정해서 결과를 보여주는 상태
-    let state = 'wait';
+  const L = {
+    grab: ['어? 잡혔다', '앗 뭐야', '으앗! 말랑말랑 금지'],
+    press: ['꾹...', '눌리고 있어요', '아야... 아니 시원해', '푹 들어간다'],
+    stretch: ['쭈우우욱~', '늘어난다아', '떡 됐다'],
+    arm: ['놓으면 날아가요!', '이거 놓으면 큰일 나요', '튕길 준비 완료!'],
+    soft: ['휴 놔줬네', '다시 제자리~', '아 시원해'],
+    fast: ['뿅~!', '탱탱볼 된 기분!', '으아 튕긴다아!'],
+    hit: ['쾅!', '아얏', '으악 벽이다', '찌그러진다아'],
+    idle: ['심심해...', '나 여기 있어요', '한 번만 눌러봐요', '말랑말랑~', 'zzZ...']
+  };
 
-    let waitTimerId = null;   // 초록색으로 바꾸는 setTimeout의 id (취소할 때 사용)
-    let goStartTime = 0;      // 박스가 초록색으로 바뀐 순간의 시각(performance.now())
-    let bestRecordMs = null;  // 지금까지 가장 빠른 기록 (아직 없으면 null)
+  const N = 36, R = 92, TAU = Math.PI * 2;
+  const T = 95; // 이 이상 당기고 놓으면 벽으로 튕겨 나감 (최대 약 115, 클수록 엄격)
+  // 튕긴 뒤 제자리로 돌아오는 속도: K는 작을수록 느리게, D는 작을수록 덜 출렁임, RAMP는 클수록 출발이 부드러움(프레임)
+  const RET_K = .005, RET_D = .88, RET_RAMP = 40;
+  const th = Array.from({ length: N }, (_, i) => i / N * TAU);
+  const ox = new Float32Array(N), oy = new Float32Array(N);
+  const vx = new Float32Array(N), vy = new Float32Array(N);
+  const PX = new Float32Array(N), PY = new Float32Array(N);
 
-    // 화면에 있는 요소들을 미리 찾아둡니다.
-    const boxElement = document.getElementById('box');
-    const bestRecordElement = document.getElementById('bestRecord');
-    const retryButton = document.getElementById('retryButton');
+  let scale = 1, cx = 0, cy = 0;
+  function layout() {
+    scale = Math.min(1.15, Math.max(.75, Math.min(innerWidth, innerHeight) / 430));
+    cx = innerWidth / 2; cy = innerHeight * .54;
+    document.documentElement.style.setProperty('--s', scale);
+  }
+  layout(); addEventListener('resize', layout);
 
-    // 박스의 클래스와 문구를 현재 state에 맞게 바꿔주는 함수
-    function setBoxClass(className, text) {
-      boxElement.className = className; // 색깔을 바꾸기 위해 클래스 이름을 교체
-      boxElement.textContent = text;     // 박스 안의 문구를 교체
+  // 말랑이 전체 위치(중앙 기준 오프셋, px)
+  let bx = 0, by = 0, bvx = 0, bvy = 0, fly = 0, settle = 0;
+  // 드래그 상태
+  let drag = false, pid = null, thg = 0, nx = 1, ny = 0, ptx = 0, pty = 0;
+  let r0 = 0, th0 = 0, thU = 0, rotT = 0, psi = 0, psiV = 0;
+  let aCur = 0, Dtx = 0, Dty = 0, pDtx = 0, pDty = 0, armed = false;
+  let dizzy = 0, energy = 0, whoosh = 0, maxStr = 0, frame = 0;
+  let blink = false, eyeRy = 16, lastSay = performance.now(), lastDragSay = 0, hintHidden = false;
+
+  const wrap = x => ((x + Math.PI) % TAU + TAU) % TAU - Math.PI;
+  const f = n => n.toFixed(1);
+
+  function say(t, ms = 1800) {
+    bubble.textContent = t;
+    bubble.classList.remove('show'); void bubble.offsetWidth; bubble.classList.add('show');
+    clearTimeout(say.t); say.t = setTimeout(() => bubble.classList.remove('show'), ms);
+    lastSay = performance.now();
+  }
+
+  function spark(px, py, spread) {
+    const s = document.createElement('i');
+    s.className = 'spark';
+    s.textContent = pick(['✦', '✧', '★', '●']);
+    s.style.cssText = `left:${px}px;top:${py}px;color:${pick(cols)};font-size:${10 + Math.random() * 14 | 0}px;` +
+      `--dx:${(Math.random() - .5) * spread}px;--dy:${(Math.random() - .5) * spread}px`;
+    document.body.appendChild(s);
+    s.addEventListener('animationend', () => s.remove());
+  }
+
+  for (let i = 0; i < 14; i++) {
+    const d = document.createElement('div');
+    d.className = 'deco';
+    d.textContent = pick(['✦', '✧', '+', '●', '★']);
+    d.style.cssText = `left:${Math.random() * 96}%;top:${Math.random() * 96}%;color:${pick(cols)};` +
+      `font-size:${12 + Math.random() * 16 | 0}px;animation-delay:${-Math.random() * 6}s;animation-duration:${5 + Math.random() * 4}s`;
+    document.body.appendChild(d);
+  }
+
+  // 손가락 위치 -> 변형 목표값
+  // 당기는 방향은 손가락이 몸 중심을 도는 각도를 따라가고, 얼굴도 그만큼 같이 돌아감
+  function setTarget(px, py) {
+    const Px = (px - (cx + bx)) / scale, Py = (py - (cy + by)) / scale;
+    const r = Math.hypot(Px, Py), a2 = Math.atan2(Py, Px);
+    if (r >= 20) thU += wrap(a2 - thU);
+    const wth = Math.max(0, Math.min(1, (r - 20) / 30)); // 중심 근처에선 각도가 불안정해서 서서히 반영
+    const acc = thU - th0;
+    thg = th0 + wth * acc;
+    nx = Math.cos(thg); ny = Math.sin(thg);
+    rotT = wth * acc;
+
+    const raw = r - r0;
+    let a = raw;
+    if (a > 0) a = R * 1.25 * Math.tanh(a / (R * 1.25));      // 당길수록 뻑뻑해짐
+    else a = -R * .55 * Math.tanh(-a / (R * .55));              // 너무 깊이는 안 눌림
+    a -= 14 * Math.max(0, 1 - Math.abs(raw) / 40);              // 가만히 누르면 살짝 꾹
+    aCur = a; Dtx = nx * a; Dty = ny * a;
+    ptx = px; pty = py;
+  }
+
+  addEventListener('pointerdown', e => {
+    if (drag) return;
+    const Px = (e.clientX - (cx + bx)) / scale, Py = (e.clientY - (cy + by)) / scale;
+    if (Math.hypot(Px, Py) > R + 28) return;
+    drag = true; pid = e.pointerId;
+    try { document.body.setPointerCapture(pid); } catch (_) {}
+    r0 = Math.hypot(Px, Py); th0 = Math.atan2(Py, Px); thU = th0;
+    fly = 0; // 날아가는 중에도 잡을 수 있음
+    setTarget(e.clientX, e.clientY);
+    if (!hintHidden) { hintHidden = true; $('hint').classList.add('gone'); }
+    if (dizzy <= 0) { say(pick(L.grab)); lastDragSay = performance.now(); }
+    navigator.vibrate && navigator.vibrate(15);
+  });
+  addEventListener('pointermove', e => { if (drag && e.pointerId === pid) setTarget(e.clientX, e.clientY); });
+
+  function release(e) {
+    if (!drag || e.pointerId !== pid) return;
+    drag = false; settle = 0;
+    const a = aCur;
+    Dtx = 0; Dty = 0; aCur = 0; rotT = 0;
+    psi = wrap(psi); // 여러 바퀴 돌렸어도 가까운 각도로 풀리게
+    if (a > T) {
+      const v = 14 + (a - T) * .5;
+      bvx = -nx * v; bvy = -ny * v; fly = 90; // 당긴 반대쪽으로 발사
+      if (dizzy <= 0) say(pick(L.fast));
+    } else if (dizzy <= 0) say(pick(L.soft));
+  }
+  addEventListener('pointerup', release);
+  addEventListener('pointercancel', release);
+  addEventListener('contextmenu', e => e.preventDefault());
+
+  setInterval(() => { blink = true; setTimeout(() => blink = false, 140); }, 3200);
+
+  // 벽에 부딪힘: 닿은 쪽이 찌그러지고 별이 튐
+  function wallHit(wx, wy, vn) {
+    whoosh++;
+    $('whoosh').textContent = whoosh;
+    const wa = Math.atan2(wy, wx), imp = Math.min(30, vn) / scale * .5;
+    for (let i = 0; i < N; i++) {
+      const d = Math.abs(wrap(th[i] - wa)), g = Math.exp(-d * d / (2 * .7 * .7));
+      vx[i] -= wx * imp * g; vy[i] -= wy * imp * g;
+    }
+    psiV += (Math.random() < .5 ? -1 : 1) * Math.min(.35, vn * .015);
+    const half = R * scale;
+    for (let k = 0; k < 5; k++) spark(cx + bx + wx * half, cy + by + wy * half, 90);
+    navigator.vibrate && navigator.vibrate(10);
+    if (dizzy <= 0 && performance.now() - lastSay > 700)
+      say(whoosh % 10 === 0 ? `벌써 ${whoosh}번째 쾅... 너무하네` : pick(L.hit), 1200);
+  }
+
+  function tick(t) {
+    const half = R * scale;
+
+    // 전체 위치: 발사되면 벽에서 튕기고, 끝나면 중앙으로 스프링 복귀
+    if (fly > 0) {
+      fly--;
+      const fr = fly > 40 ? .995 : .94; // 막판엔 점점 느려지면서 멈춤
+      bx += bvx; by += bvy; bvx *= fr; bvy *= fr;
+      const minX = half + 4 - cx, maxX = innerWidth - half - 4 - cx;
+      const minY = half + 6 - cy, maxY = innerHeight - half - 62 - cy;
+      if (bx < minX) { bx = minX; if (bvx < 0) { wallHit(-1, 0, -bvx); bvx = -bvx * .88; } }
+      else if (bx > maxX) { bx = maxX; if (bvx > 0) { wallHit(1, 0, bvx); bvx = -bvx * .88; } }
+      if (by < minY) { by = minY; if (bvy < 0) { wallHit(0, -1, -bvy); bvy = -bvy * .88; } }
+      else if (by > maxY) { by = maxY; if (bvy > 0) { wallHit(0, 1, bvy); bvy = -bvy * .88; } }
+      if (fly === 0 || Math.hypot(bvx, bvy) < 2) { fly = 0; settle = 0; if (dizzy <= 0) say('다시 중앙으로~'); }
+    } else {
+      if (!drag) settle++;
+      const kk = drag ? .02 : RET_K * Math.min(1, settle / RET_RAMP), dd = drag ? .8 : RET_D;
+      bvx = (bvx - bx * kk) * dd; bvy = (bvy - by * kk) * dd;
+      bx += bvx; by += bvy;
+      if (!drag && Math.abs(bx) + Math.abs(by) + Math.abs(bvx) + Math.abs(bvy) < .05) { bx = by = bvx = bvy = 0; }
+    }
+    mal.style.transform = `translate(${f(bx)}px,${f(by)}px)`;
+    mal.classList.toggle('below', cy + by < 190);
+
+    const a = drag ? aCur : 0;
+
+    // 어지러움: 정신없이 휘저으면
+    const dD = Math.hypot(Dtx - pDtx, Dty - pDty); pDtx = Dtx; pDty = Dty;
+    if (drag) energy += dD * .05;
+    energy *= .985;
+    if (energy > 30 && dizzy <= 0) {
+      dizzy = 150; energy = 0;
+      say('으에에... 어지러워 @_@', 2400);
+      navigator.vibrate && navigator.vibrate([30, 40, 30]);
+    }
+    if (dizzy > 0 && --dizzy === 0) say('휴... 살았다');
+
+    // 발사 구간을 넘으면 테두리가 핑크로 바뀌면서 알려줌
+    const nowArmed = drag && aCur > T;
+    if (nowArmed !== armed) {
+      armed = nowArmed;
+      bodyP.setAttribute('stroke', armed ? '#ff6ad5' : 'rgba(255,255,255,.4)');
+      if (armed) { if (dizzy <= 0) { say(pick(L.arm), 2200); lastDragSay = t; } navigator.vibrate && navigator.vibrate(20); }
     }
 
-    // 최고 기록 표시를 새로고침하는 함수
-    function updateBestRecordDisplay() {
-      if (bestRecordMs === null) {
-        bestRecordElement.textContent = '최고 기록: 없음';
-      } else {
-        bestRecordElement.textContent = '최고 기록: ' + bestRecordMs + 'ms';
+    if (drag) {
+      if (a > maxStr) { maxStr = a; $('maxs').textContent = (maxStr / 10).toFixed(1); }
+      if (frame % 5 === 0 && a > 30) spark(ptx, pty, 50);
+      if (dizzy <= 0 && !armed && t - lastDragSay > 1500) {
+        if (a < -8) { say(pick(L.press)); lastDragSay = t; }
+        else if (a > 30) { say(pick(L.stretch)); lastDragSay = t; }
       }
     }
 
-    // 게임을 처음부터 다시 시작하는 함수 (페이지 로드 시, 다시 시도 버튼 클릭 시 사용)
-    function startWaiting() {
-      // 혹시 이전에 걸려 있던 타이머가 있다면 취소해서 중복 실행을 막습니다.
-      if (waitTimerId !== null) {
-        clearTimeout(waitTimerId);
-        waitTimerId = null;
-      }
-
-      state = 'wait';
-      setBoxClass('wait', '기다리세요');
-
-      // 1초 ~ 4초 사이의 랜덤한 시간(밀리초)을 계산합니다.
-      const randomDelay = 1000 + Math.random() * 3000;
-
-      waitTimerId = setTimeout(function () {
-        // 시간이 다 되면 상태를 'go'로 바꾸고 박스를 초록색으로 변경합니다.
-        state = 'go';
-        goStartTime = performance.now(); // 초록색으로 바뀐 정확한 시각 기록
-        setBoxClass('go', '지금 클릭!');
-      }, randomDelay);
+    // 꼭짓점마다 스프링: 당긴 쪽이 가장 많이 움직이고 멀수록 느리게 따라옴
+    const damp = drag ? .65 : .88;
+    const br = Math.sin(t / 650) * 1.6;
+    const wob = dizzy > 0 ? 6 : 0;
+    let sx = 0, sy = 0;
+    for (let i = 0; i < N; i++) {
+      const d = Math.abs(wrap(th[i] - thg));
+      const g = Math.exp(-d * d / (2 * .62 * .62));
+      const ring = Math.exp(-((d - 1.15) * (d - 1.15)) / (2 * .45 * .45));
+      const rad = -a * .3 * ring + br + wob * Math.sin(3 * th[i] + t / 260); // 당기면 옆이 잘록, 누르면 옆이 불룩
+      const c = Math.cos(th[i]), s = Math.sin(th[i]);
+      const k = .2 - .09 * (d / Math.PI);
+      vx[i] = (vx[i] + (Dtx * g + c * rad - ox[i]) * k) * damp;
+      vy[i] = (vy[i] + (Dty * g + s * rad - oy[i]) * k) * damp;
+      ox[i] += vx[i]; oy[i] += vy[i];
+      PX[i] = R * c + ox[i]; PY[i] = R * s + oy[i];
+      sx += ox[i]; sy += oy[i];
     }
-
-    // 박스를 클릭했을 때 실행되는 함수
-    function handleBoxClick() {
-      if (state === 'wait') {
-        // 아직 빨간색인데 미리 클릭한 경우 -> 실패 처리
-        clearTimeout(waitTimerId);
-        waitTimerId = null;
-        state = 'tooSoon';
-        setBoxClass('too-soon', '너무 빨리 눌렀어요! 다시 시도해보세요');
-      } else if (state === 'go') {
-        // 초록색일 때 클릭한 경우 -> 반응 시간 계산
-        const reactionTime = Math.round(performance.now() - goStartTime);
-        state = 'result';
-        setBoxClass('result', '반응 속도: ' + reactionTime + 'ms');
-
-        // 최고 기록 갱신 확인
-        if (bestRecordMs === null || reactionTime < bestRecordMs) {
-          bestRecordMs = reactionTime;
-          updateBestRecordDisplay();
-        }
-      }
-      // state가 'tooSoon'이나 'result'일 때는 박스를 클릭해도 아무 반응 없음
-      // (다시 시도 버튼으로만 재시작 가능)
+    let dstr = `M${f(PX[0])} ${f(PY[0])}`;
+    for (let i = 0; i < N; i++) {
+      const i0 = (i + N - 1) % N, i1 = i, i2 = (i + 1) % N, i3 = (i + 2) % N;
+      dstr += `C${f(PX[i1] + (PX[i2] - PX[i0]) / 6)} ${f(PY[i1] + (PY[i2] - PY[i0]) / 6)} ` +
+              `${f(PX[i2] - (PX[i3] - PX[i1]) / 6)} ${f(PY[i2] - (PY[i3] - PY[i1]) / 6)} ${f(PX[i2])} ${f(PY[i2])}`;
     }
+    bodyP.setAttribute('d', dstr + 'Z');
 
-    // 박스 클릭, 다시 시도 버튼 클릭에 이벤트 연결
-    boxElement.addEventListener('click', handleBoxClick);
-    retryButton.addEventListener('click', startWaiting);
+    // 얼굴: 변형 방향으로 살짝 쏠리고, 손가락이 도는 만큼 같이 회전 (스프링이라 약간 늦게 따라옴)
+    psiV = (psiV + (rotT - psi) * .14) * .82; psi += psiV;
+    const clampv = v => Math.max(-24, Math.min(24, v));
+    const fx = clampv(sx / N), fy = clampv(sy / N);
+    face.setAttribute('transform', `translate(${f(fx)} ${f(fy)}) rotate(${f(psi * 180 / Math.PI)})`);
+    hl.setAttribute('transform', `translate(${f(fx * .6)} ${f(fy * .6)})`);
 
-    // 페이지가 열리면 바로 첫 게임을 시작합니다.
-    startWaiting();
-  </script>
+    // 눈
+    const pressed = drag && a < -8;
+    eyeRy += ((pressed || blink ? 3 : 16) - eyeRy) * .4;
+    let lx, ly;
+    if (drag) {
+      const ex = (ptx - (cx + bx)) / scale, ey = (pty - (cy + by)) / scale, len = Math.hypot(ex, ey) || 1;
+      const m = Math.min(len, 120) / 120 * 6;
+      lx = ex / len * m; ly = ey / len * m;
+    } else { lx = Math.sin(t / 1400) * 4; ly = 1; }
+    const cs = Math.cos(psi), sn = Math.sin(psi); // 얼굴이 돌아가도 시선은 화면 기준 유지
+    const lx2 = lx * cs + ly * sn, ly2 = -lx * sn + ly * cs;
+    eyeL.setAttribute('ry', f(eyeRy)); eyeR.setAttribute('ry', f(eyeRy));
+    [[pupL, -30], [pupR, 30]].forEach(([p, b0]) => {
+      p.setAttribute('cx', f(b0 + lx2)); p.setAttribute('cy', f(-14 + ly2));
+      p.setAttribute('ry', f(8 * eyeRy / 16));
+    });
+    eyes.setAttribute('display', dizzy > 0 ? 'none' : 'inline');
+    dz.setAttribute('display', dizzy > 0 ? 'inline' : 'none');
 
+    // 입
+    const open = dizzy > 0 || fly > 0 || (drag && Math.hypot(Dtx, Dty) > 25);
+    smile.setAttribute('display', open ? 'none' : 'inline');
+    oh.setAttribute('display', open ? 'inline' : 'none');
+
+    if (!drag && fly === 0 && t - lastSay > 7000) say(pick(L.idle), 2200);
+    frame++;
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+  setTimeout(() => say('나 좀 눌러봐요'), 700);
+})();
+</script>
 </body>
 </html>

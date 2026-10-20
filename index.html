@@ -55,6 +55,21 @@ header p.gone{opacity:0}
 .spark{position:fixed;pointer-events:none;z-index:6;font-style:normal;line-height:1;animation:pop .7s ease-out forwards;text-shadow:0 0 10px currentColor}
 @keyframes pop{to{transform:translate(var(--dx),var(--dy)) scale(.2) rotate(180deg);opacity:0}}
 
+/* 빙빙 돌리면 쌓이는 번쩍 이펙트 */
+#fx{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:4}
+#flash{position:fixed;inset:0;pointer-events:none;z-index:8;opacity:0;
+  background:radial-gradient(circle at 50% 54%,#fff 0,rgba(255,255,255,.85) 22%,rgba(255,106,213,.55) 62%,rgba(180,92,255,.35) 100%)}
+#rays{position:absolute;pointer-events:none;opacity:0;border-radius:50%;
+  width:calc(1000px*var(--s));height:calc(1000px*var(--s));left:calc(-500px*var(--s));top:calc(-500px*var(--s));
+  background:repeating-conic-gradient(rgba(198,255,0,.9) 0 5deg,transparent 5deg 15deg,rgba(255,106,213,.9) 15deg 20deg,transparent 20deg 30deg);
+  -webkit-mask-image:radial-gradient(circle,#000 6%,transparent 60%);mask-image:radial-gradient(circle,#000 6%,transparent 60%)}
+.glint{position:fixed;pointer-events:none;z-index:7;font-style:normal;line-height:1;
+  animation:glint var(--t,.55s) ease-out forwards;text-shadow:0 0 8px currentColor,0 0 18px currentColor}
+@keyframes glint{
+  0%{transform:translate(-50%,-50%) translate(0,0) scale(0) rotate(0);opacity:0}
+  30%{transform:translate(-50%,-50%) translate(calc(var(--dx)*.4),calc(var(--dy)*.4)) scale(1.25) rotate(40deg);opacity:1}
+  100%{transform:translate(-50%,-50%) translate(var(--dx),var(--dy)) scale(0) rotate(120deg);opacity:0}}
+
 @media (prefers-reduced-motion:reduce){.deco,h1{animation:none}}
 </style>
 </head>
@@ -64,7 +79,11 @@ header p.gone{opacity:0}
   <p id="hint">꾹 눌러보고, 쭉 당기고, 빙빙 돌려보세요</p>
 </header>
 
+<canvas id="fx"></canvas>
+<div id="flash"></div>
+
 <div id="mal">
+  <div id="rays"></div>
   <svg id="svg" viewBox="-180 -180 360 360" aria-label="말랑이">
     <defs>
       <radialGradient id="gb" cx=".35" cy=".28" r=".8">
@@ -109,6 +128,9 @@ header p.gone{opacity:0}
   const eyes = $('eyes'), dz = $('dz'), smile = $('smile'), oh = $('oh');
   const pick = a => a[Math.random() * a.length | 0];
   const cols = ['#c6ff00', '#ff6ad5', '#b45cff', '#ffffff'];
+  const PAL = [...cols, '#ffd84a', '#4de1ff']; // 폭죽 색
+  const rays = $('rays'), flashEl = $('flash'), svgEl = $('svg'), fx = $('fx'), ctx = fx.getContext('2d');
+  const calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); // 모션 줄이기 설정이면 순한 맛
 
   const L = {
     grab: ['어? 잡혔다', '앗 뭐야', '으앗! 말랑말랑 금지'],
@@ -118,13 +140,20 @@ header p.gone{opacity:0}
     soft: ['휴 놔줬네', '다시 제자리~', '아 시원해'],
     fast: ['뿅~!', '탱탱볼 된 기분!', '으아 튕긴다아!'],
     hit: ['쾅!', '아얏', '으악 벽이다', '찌그러진다아'],
-    idle: ['심심해...', '나 여기 있어요', '한 번만 눌러봐요', '말랑말랑~', 'zzZ...']
+    idle: ['심심해...', '나 여기 있어요', '한 번만 눌러봐요', '말랑말랑~', 'zzZ...'],
+    charge: ['어? 몸이 반짝반짝해요', '자꾸 빛이 나는데요', '이거 뭔가 심상치 않아'],
+    brink: ['으으 뭔가 온다...', '터질 것 같아요!!', '잠깐 잠깐 뭔가 올라와'],
+    boom: ['으아아아 팡팡팡!!', '폭죽 터진다아아!', '축제다아아!!'],
+    after: ['후아... 눈이 핑핑', '헉헉 방금 뭐였지', '다시 평범한 말랑이로~']
   };
 
   const N = 36, R = 92, TAU = Math.PI * 2;
   const T = 95; // 이 이상 당기고 놓으면 벽으로 튕겨 나감 (최대 약 115, 클수록 엄격)
   // 튕긴 뒤 제자리로 돌아오는 속도: K는 작을수록 느리게, D는 작을수록 덜 출렁임, RAMP는 클수록 출발이 부드러움(프레임)
   const RET_K = .005, RET_D = .88, RET_RAMP = 40;
+  // 빙빙 돌리기: SPIN_START초 이상 계속 돌리면 반짝이가 생기기 시작하고, SPIN_BURST바퀴를 넘기면 폭죽이 터짐
+  // SPIN_MIN은 이 각속도(rad/s) 이상으로 한 방향으로 꾸준히 돌릴 때만 돌리는 걸로 치는 기준, FIN_MS는 폭죽 연출 길이(ms)
+  const SPIN_START = 1.0, SPIN_BURST = 7, SPIN_MIN = 2, FIN_MS = 4800, SWIRL_LEAK = .8;
   const th = Array.from({ length: N }, (_, i) => i / N * TAU);
   const ox = new Float32Array(N), oy = new Float32Array(N);
   const vx = new Float32Array(N), vy = new Float32Array(N);
@@ -146,6 +175,20 @@ header p.gone{opacity:0}
   let aCur = 0, Dtx = 0, Dty = 0, pDtx = 0, pDty = 0, armed = false;
   let dizzy = 0, energy = 0, whoosh = 0, maxStr = 0, frame = 0;
   let blink = false, eyeRy = 16, lastSay = performance.now(), lastDragSay = 0, hintHidden = false;
+  // 빙빙 돌리기 상태
+  let lastA = 0, haveA = false, swirl = 0, spinDir = 1, spinT = 0, laps = 0, heat = 0, said1 = false, said2 = false;
+  let finale = false, finT0 = 0, nextShot = 0, env = 0, spinDeg = 0, rayA = 0, rayOn = false, filt = false;
+  let flashA = 0, glints = 0, fxDirty = false, prevT = 0, W = 0, H = 0;
+  const parts = [], shells = [], rings = [];
+  const FIN_TURNS = calm ? 1 : 5;
+
+  function sizeFx() {
+    const d = Math.min(2, devicePixelRatio || 1);
+    W = innerWidth; H = innerHeight;
+    fx.width = W * d | 0; fx.height = H * d | 0;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  sizeFx(); addEventListener('resize', sizeFx);
 
   const wrap = x => ((x + Math.PI) % TAU + TAU) % TAU - Math.PI;
   const f = n => n.toFixed(1);
@@ -198,7 +241,7 @@ header p.gone{opacity:0}
   }
 
   addEventListener('pointerdown', e => {
-    if (drag) return;
+    if (drag || finale) return;
     const Px = (e.clientX - (cx + bx)) / scale, Py = (e.clientY - (cy + by)) / scale;
     if (Math.hypot(Px, Py) > R + 28) return;
     drag = true; pid = e.pointerId;
@@ -247,7 +290,200 @@ header p.gone{opacity:0}
       say(whoosh % 10 === 0 ? `벌써 ${whoosh}번째 쾅... 너무하네` : pick(L.hit), 1200);
   }
 
+  // 말랑이 주변에서 번쩍하고 사라지는 반짝이. 도는 방향으로 휘감기듯 흘러감
+  function glint(k) {
+    if (glints > 70) return;
+    glints++;
+    const a = Math.random() * TAU;
+    const rr = R * scale * (1.02 + Math.random() * (.35 + k * .45));
+    const tx = -Math.sin(a) * spinDir, ty = Math.cos(a) * spinDir, drift = 18 + Math.random() * 40 * (.5 + k);
+    const s = document.createElement('i');
+    s.className = 'glint';
+    s.textContent = pick(['✦', '✧', '★', '●']);
+    s.style.cssText = `left:${cx + bx + Math.cos(a) * rr}px;top:${cy + by + Math.sin(a) * rr}px;` +
+      `color:${pick(k >= 1 ? PAL : cols)};font-size:${10 + Math.random() * (8 + k * 16) | 0}px;` +
+      `--dx:${f(tx * drift)}px;--dy:${f(ty * drift)}px;--t:${(.35 + Math.random() * .4).toFixed(2)}s`;
+    document.body.appendChild(s);
+    let gone = false;
+    const rm = () => { if (gone) return; gone = true; s.remove(); glints--; };
+    s.addEventListener('animationend', rm); setTimeout(rm, 1500);
+  }
+
+  // 폭죽 한 방: 동그랗게 퍼지는 불꽃 + 충격 고리
+  function burst(x, y, big) {
+    if (parts.length > 900) return;
+    const n = (big ? 110 : 72) * (calm ? .45 : 1) | 0;
+    const c1 = pick(PAL), c2 = pick(PAL), ring = Math.random() < .35;
+    const sp = (big ? 7.5 : 5.5) * (.8 + Math.random() * .4);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU + Math.random() * .2, v = ring ? sp : sp * (.25 + Math.random() * .75);
+      parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 55 + Math.random() * 45 | 0,
+        c: i % 2 ? c1 : c2, r: 1.6 + Math.random() * 1.8 });
+    }
+    rings.push({ x, y, r: 6, max: big ? 190 : 110, c: c1 });
+    if (!calm) flashA = Math.max(flashA, big ? .5 : .07);
+  }
+
+  // 아래에서 쏘아 올려서 목표 지점에서 터지는 폭죽
+  function shell(tx, ty) {
+    const sx = tx + (Math.random() - .5) * 120, sy = H + 10, n = 24 + Math.random() * 8 | 0;
+    shells.push({ x: sx, y: sy, vx: (tx - sx) / n, vy: (ty - sy) / n, f: 0, n });
+  }
+
+  function drawFx() {
+    if (!parts.length && !shells.length && !rings.length) {
+      if (fxDirty) { ctx.clearRect(0, 0, W, H); fxDirty = false; }
+      return;
+    }
+    fxDirty = true;
+    ctx.globalCompositeOperation = 'destination-out'; // 잔상이 서서히 사라지게
+    ctx.fillStyle = 'rgba(0,0,0,.2)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (let i = shells.length - 1; i >= 0; i--) {
+      const sh = shells[i];
+      sh.x += sh.vx; sh.y += sh.vy; sh.f++;
+      parts.push({ x: sh.x, y: sh.y, vx: (Math.random() - .5) * .6, vy: .8 + Math.random() * .6, life: 0, max: 14 + Math.random() * 10 | 0, c: '#ffe9a8', r: 1.4 });
+      if (sh.f >= sh.n) { burst(sh.x, sh.y, false); shells.splice(i, 1); }
+    }
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const q = parts[i];
+      q.vx *= .975; q.vy = q.vy * .975 + .07; q.x += q.vx; q.y += q.vy;
+      if (++q.life > q.max) { parts[i] = parts[parts.length - 1]; parts.pop(); continue; }
+      const k = q.life / q.max;
+      let al = 1 - k;
+      if (k > .55) al *= .5 + .5 * Math.sin(q.life * 1.7 + q.x); // 막판엔 반짝반짝 깜빡임
+      ctx.globalAlpha = Math.max(0, al);
+      ctx.fillStyle = q.c;
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.r * (1 - k * .4), 0, TAU); ctx.fill();
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i];
+      r.r += (r.max - r.r) * .1;
+      const al = 1 - r.r / r.max;
+      if (al < .04) { rings.splice(i, 1); continue; }
+      ctx.globalAlpha = al * .8; ctx.strokeStyle = r.c; ctx.lineWidth = 1 + 3 * al;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function startFinale(t) {
+    finale = true; finT0 = t; nextShot = t + 500; env = 0;
+    drag = false; settle = 0; aCur = 0; Dtx = Dty = 0; rotT = 0; // 잡고 있던 손은 자동으로 놓음
+    dizzy = 0; energy = 0; heat = 0; laps = 0; spinT = 0; said1 = said2 = false;
+    const x = cx + bx, y = cy + by;
+    burst(x, y, true);
+    rings.push({ x, y, r: 20, max: Math.max(W, H) * .65, c: '#ffffff' });
+    for (let i = 0; i < 3; i++) {
+      const a = Math.random() * TAU, d = (150 + Math.random() * 110) * scale;
+      burst(x + Math.cos(a) * d, y + Math.sin(a) * d, false);
+    }
+    flashA = calm ? .25 : .9;
+    for (let i = 0; i < N; i++) { vx[i] += Math.cos(th[i]) * 9; vy[i] += Math.sin(th[i]) * 9; } // 몸이 팡 부풀었다가 출렁
+    say(pick(L.boom), 2600); lastDragSay = t;
+    navigator.vibrate && navigator.vibrate([40, 30, 40, 30, 80]);
+  }
+
+  function endFinale() {
+    finale = false; env = 0; spinDeg = 0;
+    svgEl.style.transform = '';
+    for (let i = 0; i < N; i++) { vx[i] -= Math.cos(th[i]) * 5; vy[i] -= Math.sin(th[i]) * 5; } // 착지하듯 살짝 찌그러짐
+    say(pick(L.after), 2400); lastDragSay = performance.now();
+  }
+
+  // 빙빙 돌리기 감지 -> 반짝이 단계 -> 폭죽 피날레. 매 프레임 호출
+  function spinFx(t, dt) {
+    let circling = false;
+    if (drag && !finale) {
+      swirl *= Math.exp(-dt * SWIRL_LEAK); // 누적 각도는 조금씩 새어 나감
+      const Px = (ptx - (cx + bx)) / scale, Py = (pty - (cy + by)) / scale;
+      if (Math.hypot(Px, Py) > 30) {
+        const ang = Math.atan2(Py, Px);
+        if (haveA) {
+          const dA = wrap(ang - lastA);
+          if (Math.abs(dA) < 1.2) {
+            swirl += dA; // 부호 있는 누적 각도라 왔다갔다 흔들면 서로 상쇄됨
+            if (Math.abs(swirl) > SPIN_MIN / SWIRL_LEAK) { circling = true; laps += Math.abs(dA) / TAU; spinDir = swirl < 0 ? -1 : 1; }
+          }
+        }
+        lastA = ang; haveA = true;
+      } else haveA = false;
+    } else { haveA = false; swirl *= .85; }
+
+    if (circling) spinT += dt;
+    else {
+      spinT = Math.max(0, spinT - dt * (drag ? 1.5 : 3));
+      laps = Math.max(0, laps - dt * (drag ? .6 : 2));
+    }
+
+    const target = !finale && spinT >= SPIN_START ? Math.min(1, .12 + laps / SPIN_BURST * .88) : 0;
+    heat += (target - heat) * Math.min(1, dt * 5);
+    if (target === 0 && heat < .003) heat = 0;
+
+    if (heat > .08 && !said1) { said1 = true; if (dizzy <= 0) { say(pick(L.charge), 2000); lastDragSay = t; } }
+    if (heat > .7 && !said2) { said2 = true; say(pick(L.brink), 2000); lastDragSay = t; }
+    if (heat < .02) said1 = said2 = false;
+
+    if (!finale && laps >= SPIN_BURST && spinT >= SPIN_START) startFinale(t);
+
+    // 폭죽 진행: 몸이 빙빙 돌다가 서서히 멈춤
+    if (finale) {
+      const p = (t - finT0) / FIN_MS;
+      if (p >= 1) endFinale();
+      else {
+        env = Math.min(1, p / .06) * Math.min(1, (1 - p) / .3);
+        const x = Math.min(1, p / .85);
+        spinDeg = 360 * FIN_TURNS * (.5 - .5 * Math.cos(Math.PI * Math.pow(x, .55))); // 확 빨라졌다가 부드럽게 정지, 딱 정수 바퀴라 제자리로 돌아옴
+        if (t >= nextShot && p < .78) {
+          shell(W * (.1 + Math.random() * .8), H * (.1 + Math.random() * .5));
+          nextShot = t + 380 + Math.random() * 260;
+        }
+      }
+    }
+
+    // 반짝이 생성
+    const k = finale ? 1 : heat;
+    if (k > .01) {
+      let n = (finale ? 1.4 * env : .05 + heat * .75) * dt * 60;
+      for (; n > 0; n--) if (Math.random() < Math.min(1, n)) glint(k);
+    }
+
+    // 몸 빛남: 쌓일수록 강해지고, 폭죽 땐 무지개색으로 돌아감
+    const glow = finale ? env : heat;
+    if (glow > .01) {
+      const hue = finale && !calm ? (t * .35) % 360 : 0;
+      const pulse = 1 + glow * .22 * Math.sin(t / 95);
+      svgEl.style.filter = `drop-shadow(0 0 ${14 + glow * 14 | 0}px rgba(198,255,0,.85)) ` +
+        `drop-shadow(0 0 ${34 + glow * 40 | 0}px rgba(180,92,255,${(.6 + glow * .35).toFixed(2)})) ` +
+        `hue-rotate(${hue | 0}deg) brightness(${pulse.toFixed(2)})`;
+      filt = true;
+    } else if (filt) { svgEl.style.filter = ''; filt = false; }
+
+    if (finale) {
+      const sc = 1 + env * (.1 + .05 * Math.sin(t / 80));
+      svgEl.style.transform = `rotate(${(spinDeg * spinDir).toFixed(1)}deg) scale(${sc.toFixed(3)})`;
+    }
+
+    // 뒤에서 퍼지는 빛줄기 (줄무늬가 초당 3번 넘게 깜빡이지 않게 천천히)
+    const ro = finale ? env * .85 : heat * .3;
+    if (ro > .01) {
+      rays.style.opacity = ro.toFixed(2);
+      if (!calm) rayA += dt * (finale ? 70 : 24) * spinDir;
+      rays.style.transform = `rotate(${rayA.toFixed(1)}deg)`;
+      rayOn = true;
+    } else if (rayOn) { rays.style.opacity = 0; rayOn = false; }
+
+    // 화면 번쩍
+    if (flashA > .004) { flashA *= Math.pow(.88, dt * 60); flashEl.style.opacity = flashA.toFixed(3); }
+    else if (flashA) { flashA = 0; flashEl.style.opacity = 0; }
+
+    drawFx();
+  }
+
   function tick(t) {
+    const dt = prevT ? Math.min(.05, Math.max(.004, (t - prevT) / 1000)) : .016; prevT = t;
     const half = R * scale;
 
     // 전체 위치: 발사되면 벽에서 튕기고, 끝나면 중앙으로 스프링 복귀
@@ -272,13 +508,14 @@ header p.gone{opacity:0}
     mal.style.transform = `translate(${f(bx)}px,${f(by)}px)`;
     mal.classList.toggle('below', cy + by < 190);
 
+    spinFx(t, dt);
     const a = drag ? aCur : 0;
 
     // 어지러움: 정신없이 휘저으면
     const dD = Math.hypot(Dtx - pDtx, Dty - pDty); pDtx = Dtx; pDty = Dty;
     if (drag) energy += dD * .05;
     energy *= .985;
-    if (energy > 30 && dizzy <= 0) {
+    if (energy > 30 && dizzy <= 0 && !finale) {
       dizzy = 150; energy = 0;
       say('으에에... 어지러워 @_@', 2400);
       navigator.vibrate && navigator.vibrate([30, 40, 30]);
@@ -305,7 +542,7 @@ header p.gone{opacity:0}
     // 꼭짓점마다 스프링: 당긴 쪽이 가장 많이 움직이고 멀수록 느리게 따라옴
     const damp = drag ? .65 : .88;
     const br = Math.sin(t / 650) * 1.6;
-    const wob = dizzy > 0 ? 6 : 0;
+    const wob = Math.max(dizzy > 0 ? 6 : 0, env * 9);
     let sx = 0, sy = 0;
     for (let i = 0; i < N; i++) {
       const d = Math.abs(wrap(th[i] - thg));
@@ -351,15 +588,16 @@ header p.gone{opacity:0}
       p.setAttribute('cx', f(b0 + lx2)); p.setAttribute('cy', f(-14 + ly2));
       p.setAttribute('ry', f(8 * eyeRy / 16));
     });
-    eyes.setAttribute('display', dizzy > 0 ? 'none' : 'inline');
-    dz.setAttribute('display', dizzy > 0 ? 'inline' : 'none');
+    const spinny = dizzy > 0 || finale; // 폭죽 땐 눈도 빙글빙글
+    eyes.setAttribute('display', spinny ? 'none' : 'inline');
+    dz.setAttribute('display', spinny ? 'inline' : 'none');
 
     // 입
-    const open = dizzy > 0 || fly > 0 || (drag && Math.hypot(Dtx, Dty) > 25);
+    const open = dizzy > 0 || finale || fly > 0 || (drag && Math.hypot(Dtx, Dty) > 25);
     smile.setAttribute('display', open ? 'none' : 'inline');
     oh.setAttribute('display', open ? 'inline' : 'none');
 
-    if (!drag && fly === 0 && t - lastSay > 7000) say(pick(L.idle), 2200);
+    if (!drag && !finale && fly === 0 && t - lastSay > 7000) say(pick(L.idle), 2200);
     frame++;
     requestAnimationFrame(tick);
   }
